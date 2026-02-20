@@ -1,0 +1,7 @@
+# SmolVLM 500M
+artifact_path: hhm2000-heriot-watt-university/AgriPath-VLM/model-SmolVLM_500M_ZS_VisFreeze:v2
+model_name: AgriPath-SmolVLM-500M
+run_name: SmolVLM-FV-Eval
+trc: False
+job_type: NE_fv_eval
+zs_type: frozen_vision

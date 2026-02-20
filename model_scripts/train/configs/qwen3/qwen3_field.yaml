@@ -1,0 +1,7 @@
+model_name: unsloth/Qwen2.5-VL-3B-Instruct
+run_name: Qwen2.5-VL_3B_FldLoRA
+trc: False
+job_type: field_lora
+r: 128
+# learning_rate: 0.00012912
+# weight_decay: 0.081467

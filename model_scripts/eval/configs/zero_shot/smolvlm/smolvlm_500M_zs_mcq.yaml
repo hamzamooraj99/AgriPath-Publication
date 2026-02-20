@@ -1,0 +1,6 @@
+model_path: HuggingFaceTB/SmolVLM-500M-Instruct
+model_name: SmolVLM-500M-Instruct
+run_name: SmolVLM-500M_ZS_mcq
+trc: False
+job_type: NE_ZS_mcq
+zs_type: mcq

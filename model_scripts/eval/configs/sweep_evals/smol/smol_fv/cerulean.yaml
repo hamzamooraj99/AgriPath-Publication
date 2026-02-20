@@ -1,0 +1,5 @@
+artifact_path: hhm2000-heriot-watt-university/AgriPath-VLM-Sweep/model-cerulean-sweep-8:v1
+model_name: AgriPath-SmolVLM-500M
+run_name: Smol-cerulean-FV
+trc: False
+job_type: Smol-FV_Eval

@@ -1,0 +1,7 @@
+model_name: HuggingFaceTB/SmolVLM-500M-Instruct
+run_name: SmolVLM_500M_LLoRA
+trc: False
+job_type: lab_lora
+r: 128
+learning_rate: 0.00015247
+weight_decay: 0.049888

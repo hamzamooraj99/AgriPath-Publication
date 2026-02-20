@@ -1,0 +1,6 @@
+# SmolVLM 500M
+artifact_path: hhm2000-heriot-watt-university/AgriPath-VLM/model-SmolVLM_500M_FldLoRA:v2
+model_name: AgriPath-SmolVLM-500M
+run_name: SmolVLM-Field_Eval
+trc: False
+job_type: NE_field_eval

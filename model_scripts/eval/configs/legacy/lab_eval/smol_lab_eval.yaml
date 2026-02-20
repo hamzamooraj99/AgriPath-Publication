@@ -1,0 +1,6 @@
+# SmolVLM-500M - LAB
+artifact_path: hhm2000-heriot-watt-university/AgriPath-VLM/model-SmolVLM_500M_LLoRA:v1
+model_name: AgriPath-SmolVLM-500M
+run_name: SmolVLM-Lab_Eval
+trc: False
+job_type: NE_lab_eval_full
