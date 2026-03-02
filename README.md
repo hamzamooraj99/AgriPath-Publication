@@ -50,7 +50,11 @@ AgriPath-Publication/
 │   │   ├── train_clip.py           # CLIP/SigLIP linear probe training
 │   │   ├── train_peft.py           # SmolVLM LoRA fine-tuning (PEFT/TRL)
 │   │   ├── train_unsloth.py        # Qwen2.5-VL LoRA fine-tuning (Unsloth)
-│   │   └── configs/                # Per-model YAML configs (full / lab / field / frozen-vision)
+│   │   ├── configs/                # Per-model YAML configs (full / lab / field / frozen-vision)
+│   │   │   ├── qwen3/
+│   │   │   ├── qwen7/
+│   │   │   └── smol/
+│   │   └── sweep_configs/          # W&B Bayesian sweep configs for HPO
 │   │       ├── qwen3/
 │   │       ├── qwen7/
 │   │       └── smol/
@@ -59,7 +63,7 @@ AgriPath-Publication/
 │       ├── eval_clip.py            # Linear-probe CLIP/SigLIP evaluation
 │       ├── zs_eval_clip.py         # Zero-shot CLIP/SigLIP evaluation
 │       ├── eval_peft.py            # SmolVLM LoRA evaluation
-│       ├── eval_vlm.py             # Qwen2.5-VL LoRA/zero-shot evaluation
+│       ├── eval_unsloth.py         # Qwen2.5-VL LoRA/zero-shot evaluation
 │       ├── configs/                # Eval YAML configs (LoRA & zero-shot)
 │       │   ├── lora_evals/
 │       │   └── zero_shot/
@@ -136,15 +140,23 @@ Each VLM is trained under four conditions to study the effect of training-data d
 | `field_lora` | Field images only | `*_field.yaml` |
 | `frozen_vision` | Full dataset, vision encoder frozen | `*_fv.yaml` |
 
+#### Hyperparameter Optimisation (W&B Sweeps)
+
+Learning rate and weight decay for each VLM × regime combination were determined via **Weights & Biases Bayesian sweeps** before final training. Sweep configs live in `model_scripts/train/sweep_configs/` and drive the training scripts directly, with the optimised values then committed back into the corresponding `configs/` YAML for reproducible final runs.
+
 ```bash
-# VLM training (Unsloth — Qwen models)
+# Launch a W&B sweep (example: SmolVLM full LoRA)
+wandb sweep model_scripts/train/sweep_configs/smol/smol_full.yaml
+wandb agent <sweep_id>   # runs train_peft.py with sampled HPs
+
+# Final training with optimal HPs (Unsloth — Qwen models)
 python model_scripts/train/train_unsloth.py --config model_scripts/train/configs/qwen3/qwen3_full_lora.yaml
 
-# VLM training (PEFT/TRL — SmolVLM)
+# Final training with optimal HPs (PEFT/TRL — SmolVLM)
 python model_scripts/train/train_peft.py --config model_scripts/train/configs/smol/smol_full_lora.yaml
 
 # VLM evaluation
-python model_scripts/eval/eval_vlm.py --config model_scripts/eval/configs/lora_evals/qwen3/qwen3_full/...yaml
+python model_scripts/eval/eval_unsloth.py --config model_scripts/eval/configs/lora_evals/qwen3/qwen3_full/...yaml
 ```
 
 ---
@@ -197,18 +209,27 @@ python model_scripts/eval/baseline_evaluator.py
 
 ## Installation & Requirements
 
-**Python 3.10+** is recommended. Install core dependencies:
+All experiments were run on remote GPU pods (e.g. RunPod). The full pinned dependency list is in [`requirements.txt`](requirements.txt). To replicate the environment on a fresh pod:
 
 ```bash
-pip install torch torchvision torchmetrics
-pip install transformers datasets peft trl
-pip install pytorch-lightning
-pip install unsloth
-pip install wandb
-pip install pandas matplotlib pyyaml
+pip install -r requirements.txt
 ```
 
-> **Note**: Unsloth requires a compatible CUDA environment. See the [Unsloth installation guide](https://github.com/unslothai/unsloth) for GPU setup instructions.
+Key packages and versions:
+
+| Package | Version | Purpose |
+|---|---|---|
+| `torch` | 2.7.0 | Core deep learning framework |
+| `unsloth` | 2025.7.3 | Efficient VLM LoRA fine-tuning |
+| `transformers` | 4.53.1 | Model loading & processors |
+| `peft` | 0.16.0 | LoRA adapters (SmolVLM) |
+| `trl` | 0.19.0 | SFT trainer |
+| `datasets` | 3.6.0 | HuggingFace dataset streaming |
+| `pytorch-lightning` | 2.5.0 | CNN & CLIP training loops |
+| `torchmetrics` | 1.7.4 | Evaluation metrics |
+| `wandb` | 0.21.0 | Experiment tracking & sweeps |
+
+> **Note**: Unsloth requires a CUDA-compatible GPU. See the [Unsloth installation guide](https://github.com/unslothai/unsloth) for driver requirements.
 
 ---
 
