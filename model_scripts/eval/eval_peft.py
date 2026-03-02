@@ -1,5 +1,4 @@
 # Import Libraries
-# from unsloth import FastVisionModel
 import torch
 from transformers import Idefics3ForConditionalGeneration, AutoProcessor, BitsAndBytesConfig
 from peft import PeftModel
@@ -12,13 +11,13 @@ from tqdm import tqdm
 import pandas as pd
 import re as regex
 import os
-# import wandb.errors
 import yaml, argparse
 import wandb
-# import string
 import random
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
+SEED = 3407
+random.seed(SEED)
 
 #region CONFIG SETUP
 # Argument Parser
@@ -44,12 +43,10 @@ except KeyError:
 try:
     proj_name = config['proj_name']
 except KeyError:
-    proj_name = "AgriPath-VLM-Sweep-Evals"
+    proj_name = "AgriPath-Paper"
 #endregion
 
 #region W&B SETUP
-# Weights & Biases
-# os.environ["WANDB_API_KEY"]=""
 wandb.login(key=os.getenv("WANDB_API_KEY"))
 run = wandb.init(
     project=proj_name,
@@ -81,20 +78,6 @@ crop_diseases = [
     'tomato_target_spot', 'tomato_yellow_leaf' 
 ]
 
-# def generate_mcq_keys(count):
-#     """Generates a list of MCQ keys (A, B, ..., Z, AA, AB, ...)."""
-#     alphabet = string.ascii_uppercase
-#     keys = []
-#     for i in range(count):
-#         if i < 26:
-#             keys.append(alphabet[i])
-#         else:
-#             # For keys beyond Z, start with AA, AB, etc.
-#             first_letter = alphabet[(i // 26) - 1]
-#             second_letter = alphabet[i % 26]
-#             keys.append(f"{first_letter}{second_letter}")
-#     return keys
-
 #mcq_keys = generate_mcq_keys(len(crop_diseases))
 mcq_keys = ['A', 'B', 'C', 'D']
 #endregion
@@ -103,8 +86,7 @@ mcq_keys = ['A', 'B', 'C', 'D']
 class VisionDataCollator:
     def __init__(self, processor, zs_type=None):
         self.processor = processor
-        self.instruction = "You are an expert plant pathologist. Identify the crop and the disease (if any) present in the image provided."
-        self.zs_pure_instruction = (
+        self.pure_instruction = (
             "You are an expert plant pathologist. Identify the crop and the disease present in the image provided. "
             "Respond in the following format:\n"
             "Class: [crop]\n"
@@ -121,7 +103,7 @@ class VisionDataCollator:
 
         for i in range(len(batch)):
             if(self.zs_type == "pure"): 
-                instruct = self.zs_pure_instruction
+                instruct = self.pure_instruction
             elif(self.zs_type == "context"): 
                 instruct = self.zs_context_instruction
             elif(self.zs_type == "mcq"): 
@@ -138,7 +120,7 @@ class VisionDataCollator:
                 zs_mcq_instruction = f"You are an expert plant pathologist. The image shows a plant with a disease.\nWhich of the following is the correct diagnosis?\n{mcq_options_dict}\nRespond with only the letter corresponding to the correct option."
                 instruct = zs_mcq_instruction
             else:
-                instruct = self.zs_pure_instruction
+                instruct = self.pure_instruction
 
             messages.append([
                 {"role": "system",
@@ -261,7 +243,6 @@ def eval(data_loader, model, processor, label_idx, eval_batch, zs_type=None):
     #endregion
 
     #region ====Eval Loop
-    # NEW: Setup for qualitative sampling
     sample_size = 100
     parse_samples = []
     parse_count = 0
@@ -362,9 +343,6 @@ def eval(data_loader, model, processor, label_idx, eval_batch, zs_type=None):
                 f1_pClass.update(y_pred, y_true)
                 pr_pClass.update(y_pred, y_true)
                 re_pClass.update(y_pred, y_true)
-            
-            # if idx == 0:
-            #     break
     
     total_samples = len(data_loader.dataset)
     balanced_accuracy = bal_acc.compute().cpu()
@@ -401,11 +379,11 @@ def eval(data_loader, model, processor, label_idx, eval_batch, zs_type=None):
 def main():
     #region ====Dataset Prep
     # Load Dataset
-    test_set = load_dataset("hamzamooraj99/AgriPath-LF16-30k", split='test').shuffle(seed=42)
+    test_set = load_dataset("hamzamooraj99/AgriPath-LF16-30k", split='test').shuffle(seed=SEED)
 
     # Separate dataset via source
-    field_set = test_set.filter(lambda sample: sample['source']=='field', num_proc=8).shuffle(seed=42)
-    lab_set = test_set.filter(lambda sample: sample['source']=='lab', num_proc=8).shuffle(seed=42)
+    field_set = test_set.filter(lambda sample: sample['source']=='field', num_proc=8).shuffle(seed=SEED)
+    lab_set = test_set.filter(lambda sample: sample['source']=='lab', num_proc=8).shuffle(seed=SEED)
 
     # Label Mappings
     label_idx = {sample['crop_disease_label']: sample['numeric_label'] for sample in test_set}
@@ -526,31 +504,6 @@ def main():
         "overall_metrics/F1 Score": wandb.plot.bar(summary_table, "Source", "F1 Score"),
         "overall_metrics/Parse Success Rate": wandb.plot.bar(summary_table, "Source", "Parse Success Rate"),
     })
-
-    # Log Parse Metrics Table Artifacts
-    # artifact_name = "parse_metrics_table"
-    # try:
-    #     artifact = run.use_artifact(f'{artifact_name}: latest')
-    #     parse_metrics_table = artifact.get("parse_metrics")
-    # except wandb.errors.CommError:
-    #     columns = [
-    #         "Model",
-    #         "False Parse Count (Main)", "Fallback Parse Count (Main)",
-    #         "False Parse Count (Lab)","Fallback Parse Count (Lab)",
-    #         "False Parse Count (Field)", "Fallback Parse Count (Field)"
-    #     ]
-    #     parse_metrics_table = wandb.Table(columns=columns)
-    
-    # parse_metrics_table.add_data(
-    #     run_name,
-    #     main_metrics['false_parse_count'], main_metrics['fallback_parse_count'],
-    #     lab_metrics['false_parse_count'], lab_metrics['fallback_parse_count'],
-    #     field_metrics['false_parse_count'], field_metrics['fallback_parse_count'],
-    # )
-
-    # new_artifact = wandb.Artifact(artifact_name, type='evaluation_results')
-    # new_artifact.add(parse_metrics_table, "parse_metrics")
-    # run.log_artifact(new_artifact)
     
     # Log Confusion Matrix
     main_fig = plot_conf_matrix(main_metrics['conf_mat'], 'main')

@@ -1,0 +1,22 @@
+command:
+- ${env}
+- python
+- ${program}
+- --config
+- ./configs/qwen7/qwen7_fv.yaml
+- ${args}
+method: bayes
+metric:
+  goal: minimize
+  name: eval_loss
+parameters:
+  learning_rate:
+    distribution: log_uniform_values
+    max: 0.00015
+    min: 5e-05
+  weight_decay:
+    distribution: uniform
+    max: 0.1
+    min: 0
+program: train_unsloth.py
+run_cap: 10

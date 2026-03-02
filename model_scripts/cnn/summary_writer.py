@@ -1,16 +1,7 @@
-'''
-# summary_writer.py
-## Author: @hamzamooraj99 (Hamza Hassan Mooraj)
-Description: This file contains a script to write a summary of all CNN model experiments using TensorBoard
-'''
-
 import torch
-# from pytorch_lightning.loggers import TensorBoardLogger
-# import pytorch_lightning as pl
 import resnet50_lightning as rn
 from torchmetrics import Accuracy, Precision, Recall, F1Score, ConfusionMatrix
 import matplotlib.pyplot as plt
-# import numpy as np
 import pandas as pd
 import os
 import wandb
@@ -23,7 +14,7 @@ parser = argparse.ArgumentParser()
 group = parser.add_mutually_exclusive_group(required=True)
 group.add_argument("--field", action="store_true")
 group.add_argument("--lab", action="store_true")
-# group.add_argument("--combined", action="store_true")
+group.add_argument("--combined", action="store_true")
 
 args = parser.parse_args()
 
@@ -41,8 +32,9 @@ if args.field:
 elif args.lab:
     artifact_path = "hhm2000-heriot-watt-university/AgriPath-VLM/lab_cnn_paths:v0"
     job_type = "NE_lab_cnn"
-# elif args.combined:
-#     artifact_path = None
+elif args.combined:
+    artifact_path = "hhm2000-heriot-watt-university/AgriPath-VLM/combined_cnn_paths:v0"
+    job_type = "evaluation_cnn"
 else:
     artifact_path = None
     raise TypeError("Undefined argument. Select from --field, --lab, or --combined")
@@ -127,7 +119,6 @@ def evaluate_model(exp_name, path, batch_size, learning_rate, num_classes = NUM_
         batch_iter = 0
         with torch.inference_mode():
             for batch in data_loader:
-                # print(f"Batch iter {batch_iter}")
                 x, y = batch
                 x, y = x.to(DEVICE), y.to(DEVICE)
                 y_hat = model(x)

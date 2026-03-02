@@ -1,5 +1,0 @@
-artifact_path: hhm2000-heriot-watt-university/AgriPath-VLM-Sweep/model-pious-sweep-9:v1
-model_name: AgriPath-Qwen2.5-VL-3B
-run_name: Qwen3-pious-FLoRA
-trc: False
-job_type: Qwen3_Eval

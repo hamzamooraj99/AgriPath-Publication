@@ -49,7 +49,6 @@ except KeyError:
     pass
 
 #---Weights & Biases Info
-# os.environ["WANDB_API_KEY"]="[WANDB_API_KEY]"
 os.environ["WANDB_LOG_MODEL"] = "end"
 os.environ["WANDB_PROJECT"] = "AgriPath-VLM-Sweep"
 wandb.login(key=os.getenv("WANDB_API_KEY"))
@@ -122,7 +121,7 @@ class SmolCollator:
         labels[labels == self.image_token_id] = IGNORE_INDEX
         batch["labels"] = labels
 
-        # # Debug prints
+        # #DEBUG BLOCK
         # print("=== SmolCollator Debug ===")
         # print(f"Batch keys: {list(batch.keys())}")
         # print(f"Batch input_ids shape: {batch['input_ids'].shape}")
@@ -136,7 +135,6 @@ class SmolCollator:
 
 def main():
     run = wandb.init(
-        # name=run_name,
         config=config,
         job_type=job_type
     )
@@ -194,35 +192,6 @@ def main():
     processor.image_processor.size = {"longest_edge": 512}
     #endregion
 
-    #region Data Formatting
-    def convert_to_conversation(sample):
-        conversation = [
-            {"role": "system",
-                "content": [
-                    # This is the line you need to change
-                    {"type": "text", "text": "You are an expert pathologist and need to identify the crop and disease present in an image. If it is a healthy crop, classify it as healthy"}
-                ]
-            },
-            {"role": "user",
-            "content": [
-                    {"type": "text", "text": "Identify the crop and disease in the image."},
-                    {"type": "image", "image": sample['image']}
-                ]
-            },
-            {"role": "assistant",
-            "content": [
-                    {"type": "text", "text": f"Class: {sample['crop']}\nDisease: {sample['disease']}"}
-                ]
-            }
-        ]
-
-        text = processor.tokenizer.apply_chat_template(
-            conversation, tokenize=False, add_generation_prompt=False
-        )
-
-        return([text])
-    #endregion
-
     #region Load Data
     if job_type == "lab_lora":    
         train_set = load_dataset("hamzamooraj99/AgriPath-LF16-30k-LAB", split='train')
@@ -234,21 +203,16 @@ def main():
         train_set = load_dataset("hamzamooraj99/AgriPath-LF16-30k", split='train')
         val_set = load_dataset("hamzamooraj99/AgriPath-LF16-30k", split='validation')
 
-    # label_idx = {sample['crop_disease_label']: sample['numeric_label'] for sample in val_set}
-    # idx_label = {v: k for k, v in label_idx.items()}
     smolCollator = SmolCollator(processor)
     #endregion
 
     #region Fine-tune the Model
     trainer = SFTTrainer(
         model=peft_model,
-        # processing_class=processor,
         tokenizer=processor.tokenizer,
         data_collator=smolCollator,
         train_dataset=train_set,
         eval_dataset=val_set,
-        # compute_metrics=compute_function,
-        # preprocess_logits_for_metrics=preprocess_logits_for_metrics,
         args=SFTConfig(
             # Optimisation & Mixed Precision
             per_device_train_batch_size=8,  #Each GPU processes 2 samples per batch,
@@ -260,10 +224,9 @@ def main():
             bf16=is_bf16_supported(),         #Use bfloat16 if GPU supports it (better stability)
             # Optimiser & Weight Decay
             optim="adamw_8bit",
-            weight_decay=weight_decay_config,#wandb.config.weight_decay,              #Regularisation to prevent overfitting
+            weight_decay=weight_decay_config,             #Regularisation to prevent overfitting
             lr_scheduler_type='linear',     #Decay type for learning rate from learning_rate to 0
             seed=3407,
-            # output_dir='outputs',
             # Settings for Vision Fine-Tuning
             remove_unused_columns=False,
             dataset_text_field="",
@@ -287,13 +250,9 @@ def main():
             logging_steps=10,
             # Save Settings
             save_strategy='no',
-            # save_steps=50,
-            # save_total_limit=1
         )
     )
     #endregion
-
-    # os.environ["UNSLOTH_FULLGRAPH"] = '1'
 
     #region Memory Stats
     #Show current memory stats
@@ -304,7 +263,6 @@ def main():
     print(f"{start_gpu_memory} GB of memory reserved.")
     trainer.can_return_loss = True
     trainer_stats = trainer.train()
-    # trainer_val = trainer.evaluate()
 
     #Show final memory and time stats
     used_memory = round(torch.cuda.max_memory_reserved() / 1024 / 1024 / 1024, 3)
@@ -315,7 +273,6 @@ def main():
     print(
         f"{round(trainer_stats.metrics['train_runtime']/60, 2)} minutes used for training."
     )
-    # print(f"Final Validation Loss: {trainer_val}")
     print(f"Peak reserved memory = {used_memory} GB.")
     print(f"Peak reserved memory for training = {used_memory_for_lora} GB.")
     print(f"Peak reserved memory % of max memory = {used_percentage} %.")

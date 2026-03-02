@@ -44,7 +44,6 @@ except KeyError:
     pass
 
 #---Weights & Biases Info
-# os.environ["WANDB_API_KEY"]="[WANDB_API_KEY]"
 os.environ["WANDB_LOG_MODEL"] = "end"
 os.environ["WANDB_PROJECT"] = "AgriPath-VLM-Sweep"
 wandb.login(key=os.getenv("WANDB_API_KEY"))
@@ -56,7 +55,6 @@ def convert_to_conversation(sample):
     conversation = [
         {"role": "system",
             "content": [
-                # This is the line you need to change
                 {"type": "text", "text": "You are an expert pathologist and need to identify the crop and disease present in an image. If it is a healthy crop, classify it as healthy"}
             ]
         },
@@ -78,7 +76,6 @@ def convert_to_conversation(sample):
 #region Model Call and Setup
 def main():
     run = wandb.init(
-        # name=run_name,
         config=config,
         job_type=job_type
     )
@@ -101,7 +98,7 @@ def main():
 
     model = FastVisionModel.get_peft_model(
         model,
-        finetune_vision_layers=ft_vis, # CHANGE FOR FROZEN VISION
+        finetune_vision_layers=ft_vis,
         finetune_attention_modules=True, 
         finetune_language_layers=True, 
         finetune_mlp_modules=True,
@@ -162,7 +159,6 @@ def main():
             weight_decay=weight_decay_config,              #Regularisation to prevent overfitting
             lr_scheduler_type='linear',     #Decay type for learning rate from learning_rate to 0
             seed=3407,
-            # output_dir='/pv-cache/qwen7_field_lora',
             # Settings for Vision Fine-Tuning
             remove_unused_columns=False,
             dataset_text_field="",
@@ -185,13 +181,9 @@ def main():
             logging_steps=10,
             # Save Settings
             save_strategy='no',
-            # save_total_limit=1,
-            # save_safetensors=True,
         )
     )
     #endregion
-
-    # os.environ["UNSLOTH_FULLGRAPH"] = '1'
 
     #region Memory Stats
     #Show current memory stats

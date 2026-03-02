@@ -1,9 +1,3 @@
-'''
-# resnet50_lightning.py
-## Author: @hamzamooraj99 (Hamza Hassan Mooraj)
-Description: This file contains the Lightning Module for a ResNet50 pre-trained CNN model as well as transfer learning steps on the AgriPath-LF16-30k Dataset
-'''
-
 import itertools
 from datasets import load_dataset, Dataset
 import torch
@@ -14,6 +8,9 @@ from torchmetrics.classification import MulticlassAccuracy
 from torchvision.models.resnet import ResNet50_Weights
 import pytorch_lightning as pl
 from functools import partial
+
+def seed_everything(seed):
+    pl.seed_everything(seed, workers=True)
 
 def agripath_collate(batch, transform):
     images = [transform(sample["image"].convert("RGB")) for sample in batch]
@@ -41,18 +38,14 @@ class AgriPathDataModule(pl.LightningDataModule):
         self.val_set = self.dataset['validation']
         self.test_set = self.dataset['test']
         # Uncomment below for summary_writer.py
-        self.lab_test = self.test_set.filter(lambda sample: sample['source']=='lab', num_proc=8).shuffle(seed=42)
-        self.field_test = self.test_set.filter(lambda sample: sample['source']=='field', num_proc=8).shuffle(seed=42)
+        # self.lab_test = self.test_set.filter(lambda sample: sample['source']=='lab', num_proc=8).shuffle(seed=42)
+        # self.field_test = self.test_set.filter(lambda sample: sample['source']=='field', num_proc=8).shuffle(seed=42)
         self.label_idx = {sample['crop_disease_label']: sample['numeric_label'] for sample in self.test_set}
         self.idx_label = {v: k for k, v in self.label_idx.items()}
     
     def collate_fn(self, batch):
         images = [self.transform(sample['image'].convert('RGB')) for sample in batch]
         labels = [sample['numeric_label'] for sample in batch]
-
-        # print(f"Image batch shape: {[image.shape for image in images]}")
-        # print(f"Label batch shape: {labels}")
-
         return torch.stack(images), torch.tensor(labels)
 
     def train_dataloader(self):
@@ -102,7 +95,6 @@ class ResNet50TLModel(pl.LightningModule):
         # Loss function and metrics
         self.criterion = nn.CrossEntropyLoss()
         self.accuracy = MulticlassAccuracy(num_classes=num_classes, average='macro')
-        # self.per_class_accuracy = MulticlassAccuracy(num_classes=num_classes, average=None)
     
     def forward(self, x):
         features = self.backbone(x) #Extract features
@@ -125,12 +117,9 @@ class ResNet50TLModel(pl.LightningModule):
         out = self.forward(images)
         loss = self.criterion(out, labels)
         acc = self.accuracy(out, labels)
-        # pc_acc = self.per_class_accuracy(out, labels)
 
         self.log("val/loss", loss, on_epoch=True, prog_bar=True)
         self.log("val/acc", acc, on_epoch=True, prog_bar=True)
-        # for i, class_acc in enumerate(pc_acc):
-        #     self.log(f"val/acc_class{i}", class_acc, prog_bar=False)
 
         return loss
     
@@ -139,12 +128,9 @@ class ResNet50TLModel(pl.LightningModule):
         out = self.forward(images)
         loss = self.criterion(out, labels)
         acc = self.accuracy(out, labels)
-        # pc_acc = self.per_class_accuracy(out, labels)
         
         self.log("test/loss", loss)
         self.log("test/acc", acc)
-        # for i, class_acc in enumerate(pc_acc):
-        #     self.log(f"test/acc_class{i}", class_acc, prog_bar=False)
 
         return {'loss': loss, 'outputs': out, 'labels': labels}
 
@@ -187,7 +173,6 @@ if __name__ == '__main__':
         # Load dataset with new batch_size
         print(f"Loading dataset with batch size {batch_size}")
         datamodule = AgriPathDataModule(hf_repo=hf_repo, batch_size=batch_size)
-        # datamodule.setup()
 
         # Train model
         print(f"\nTraining model")

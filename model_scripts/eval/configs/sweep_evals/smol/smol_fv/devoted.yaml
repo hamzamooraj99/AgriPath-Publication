@@ -1,5 +1,0 @@
-artifact_path: hhm2000-heriot-watt-university/AgriPath-VLM-Sweep/model-devoted-sweep-1:v1
-model_name: AgriPath-SmolVLM-500M
-run_name: Smol-devoted-FV
-trc: False
-job_type: Smol-FV_Eval

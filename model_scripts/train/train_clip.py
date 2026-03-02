@@ -91,11 +91,6 @@ class LinearProbeModel(pl.LightningModule):
         
         features = features / features.norm(dim=-1, keepdim=True,).clamp(min=1e-12)
         return features
-    
-    # def _maybe_init_classifier(self, features: torch.Tensor):
-    #     if self.classifier is None:
-    #         d = features.shape[-1]
-    #         self.classifier = nn.Linear(d, self.hparams.num_classes).to(self.device)
         
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         features = self._image_features(pixel_values=pixel_values)
@@ -198,12 +193,6 @@ def main(lr):
         probe = LinearProbeModel.load_from_checkpoint(ckpt.best_model_path)
         probe = probe.to(trainer.strategy.root_device)
     probe.eval()
-
-    # datamodule.setup()
-    # pixel_values, _ = next(iter(datamodule.val_dataloader()))
-    # pixel_values = pixel_values.to(probe.device)
-    # probe = probe.to(pixel_values.device)
-    # _ = probe(pixel_values)
 
     run = wandb_logger.experiment
     head_path, meta_path = probe.export_head(args.out_dir)

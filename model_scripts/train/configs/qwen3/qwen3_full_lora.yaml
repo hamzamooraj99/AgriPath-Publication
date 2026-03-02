@@ -3,5 +3,3 @@ run_name: Qwen2.5-VL_3B_FLoRA
 trc: False
 job_type: full_lora
 r: 128
-learning_rate: 0.00012912
-weight_decay: 0.081467

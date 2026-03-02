@@ -3,6 +3,4 @@ run_name: Qwen2.5-VL_7B_LLoRA
 trc: False
 job_type: lab_lora
 r: 128
-learning_rate: 0.00016903
-weight_decay: 0.064469
 

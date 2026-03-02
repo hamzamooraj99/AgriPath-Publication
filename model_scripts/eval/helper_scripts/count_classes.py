@@ -6,7 +6,7 @@ def count_all_classes(dataset_name="hamzamooraj99/AgriPath-LF16-30K"):
     Counts how many samples belong to each class across *all* splits.
     Assumes each sample has 'numeric_label' and 'crop_disease_label'.
     """
-    print(f"📦 Loading dataset: {dataset_name} ...")
+    print(f"Loading dataset: {dataset_name} ...")
     dataset = load_dataset(dataset_name)
 
     total_counts = Counter()
@@ -22,7 +22,7 @@ def count_all_classes(dataset_name="hamzamooraj99/AgriPath-LF16-30K"):
             label_name_map[label_idx] = label_name
 
     # Print the combined totals
-    print("\n📊 === CLASS COUNTS (All Splits Combined) ===")
+    print("\n === CLASS COUNTS (All Splits Combined) ===")
     print(f"{'Label Index':<12} {'Label Name':<40} {'Count':>10}")
     print("-" * 65)
     for idx, count in sorted(total_counts.items()):

@@ -13,7 +13,7 @@ import wandb
 # --- CONFIGURATION ---
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 NUM_CLASSES = 65
-PROJECT_NAME = "AgriPath-VLM-Eval"
+PROJECT_NAME = "AgriPath-Paper"
 
 class AgriPathDataModule(pl.LightningDataModule):
     def __init__(self, hf_repo, batch_size):
@@ -129,15 +129,7 @@ def evaluate_baseline(baseline_type):
     data_module = AgriPathDataModule("hamzamooraj99/AgriPath-LF16-30k", batch_size=64)
     data_module.setup()
     label_idx, idx_label = data_module.return_labels()
-
-    #region Find Majority Class
     majority_class_idx = 0
-    # if baseline_type == 'majority':
-    #     train_set = load_dataset("hamzamooraj99/AgriPath-LF16-30k", split='train')
-    #     all_labels = torch.tensor([sample['numeric_label'] for sample in train_set])
-    #     majority_class_idx = torch.bincount(all_labels).argmax().item()
-    #     print(f"Majority class found: Index {majority_class_idx} ({idx_label[majority_class_idx]})")
-    #endregion
 
     #region ==== Data Loaders
     # Using a standard DataLoader, no custom collator needed
@@ -155,8 +147,8 @@ def evaluate_baseline(baseline_type):
 
     #region ==== Log Metrics (Copied and adapted from your VLM script)
     print("Logging results to W&B...")
+
     def plot_conf_matrix(conf_mat, eval_batch):
-        # This helper function is identical
         conf_mat = conf_mat.cpu().numpy()
         fig, ax = plt.subplots(figsize=(10, 10))
         ax.matshow(conf_mat, cmap=plt.cm.Blues, alpha=0.3)
@@ -211,7 +203,7 @@ def evaluate_baseline(baseline_type):
     #endregion
 
 if __name__ == "__main__":
-    wandb.login(key="9d53025453578d5552c59a417fd34da242216859")
+    wandb.login(key=os.getenv("WANDB_API_KEY"))
 
     evaluate_baseline(baseline_type='majority')
     evaluate_baseline(baseline_type='random')
