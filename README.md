@@ -4,6 +4,7 @@
 
 [![Dataset](https://img.shields.io/badge/HuggingFace-Dataset-yellow?logo=huggingface)](https://huggingface.co/datasets/hamzamooraj99/AgriPath-LF16-30k)
 [![W&B](https://img.shields.io/badge/Weights%20&%20Biases-Experiments-orange?logo=weightsandbiases)](https://wandb.ai/hhm2000-heriot-watt-university/AgriPath-Paper/overview)
+[![arXiv]((https://img.shields.io/badge/arXiv-Preprint-red?logo=arxiv))](https://arxiv.org/abs/2603.13354)
 [![License](https://img.shields.io/github/license/hamzamooraj99/AgriPath-Publication)](LICENSE)
 
 ---
