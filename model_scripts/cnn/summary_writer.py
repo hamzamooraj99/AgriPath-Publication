@@ -1,98 +1,108 @@
-import torch
-import resnet50_lightning as rn
-from torchmetrics import Accuracy, Precision, Recall, F1Score, ConfusionMatrix
-import matplotlib.pyplot as plt
-import pandas as pd
 import os
-import wandb
-from pathlib import Path
+import re
 import argparse
+from pathlib import Path
 
-#region CONFIGURATION
+import torch
+import pandas as pd
+import matplotlib.pyplot as plt
+import wandb
+from torchmetrics import Accuracy, Precision, Recall, F1Score, ConfusionMatrix
+from torchvision import models
+from torchvision.models.resnet import ResNet50_Weights
+from torchvision.models.convnext import ConvNeXt_Tiny_Weights
+
+import cnn_lightning as cnn
+
+#region ARGPARSE
 parser = argparse.ArgumentParser()
 
-group = parser.add_mutually_exclusive_group(required=True)
-group.add_argument("--field", action="store_true")
-group.add_argument("--lab", action="store_true")
-group.add_argument("--combined", action="store_true")
+parser.add_argument("-m", "--model", type=str, choices=['resnet50', 'convnext'], required=True)
+parser.add_argument("-e", "--exp", type=str, choices=["main", "lab", "field"], default="main")
+parser.add_argument("--org", type=str, required=True)
+parser.add_argument("--artifact_version", type=int, default=0)
 
 args = parser.parse_args()
-
-# SCRIPT_DIR = Path(__file__).parent
-HF_REPO = "hamzamooraj99/AgriPath-LF16-30k"
-NUM_CLASSES = 65
-DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
-
-DataModule = rn.AgriPathDataModule
-ModelModule = rn.ResNet50TLModel
-
-if args.field:
-    artifact_path = "hhm2000-heriot-watt-university/AgriPath-VLM/field_cnn_paths:v0"
-    job_type = "NE_field_cnn"
-elif args.lab:
-    artifact_path = "hhm2000-heriot-watt-university/AgriPath-VLM/lab_cnn_paths:v0"
-    job_type = "NE_lab_cnn"
-elif args.combined:
-    artifact_path = "hhm2000-heriot-watt-university/AgriPath-VLM/combined_cnn_paths:v0"
-    job_type = "evaluation_cnn"
-else:
-    artifact_path = None
-    raise TypeError("Undefined argument. Select from --field, --lab, or --combined")
-
-if not artifact_path:
-    raise ValueError("Unexpected value - No Artifact found")
 #endregion
 
-#region HELPER FUNCTIONS
-def plot_conf_matrix(conf_mat, run_name, eval_batch):
+#region CONSTANTS
+NUM_CLASSES = 65
+DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
+ORG = args.org
+TRAIN_PROJ = "AgriPath-VLM"
+EVAL_PROJ = "AgriPath-Paper"
+HF_REPO = "hamzamooraj99/AgriPath-LF16-30k"
+#endregion
+
+#region SETUP
+artifact_path = f"{ORG}/{TRAIN_PROJ}/{args.model}_{args.exp}_checkpoints:v{args.artifact_version}"
+job_type = f"{args.model}_{args.exp}_eval"
+
+DataModule = cnn.AgriPathDataModule
+ModelModule = cnn.CNNLightningModel
+#endregion
+
+#region HELPERS
+def build_backbone(model_name:str):
+    if model_name == 'resnet50':
+        return models.resnet50(weights=ResNet50_Weights.IMAGENET1K_V1)
+    elif model_name == 'convnext':
+        return models.convnext_tiny(weights=ConvNeXt_Tiny_Weights.IMAGENET1K_V1)
+    else:
+        raise ValueError(f"Unsupported model: {model_name}")
+
+def plot_conf_matrix(conf_mat, run_name, eval_split):
     conf_mat = conf_mat.cpu().numpy()
     fig, ax = plt.subplots(figsize=(10, 10))
     ax.matshow(conf_mat, cmap=plt.cm.Blues)
-    for i in range(conf_mat.shape[0]):
-        for j in range(conf_mat.shape[1]):
-            ax.text(x=j, y=i, s=conf_mat[i, j], va='center', ha='center')
-    plt.xlabel('Predicted')
-    plt.ylabel('Actual')
-    plt.title(f"{run_name}_{eval_batch}")
+    ax.set_xlabel("Predicted")
+    ax.set_ylabel("Actual")
+    ax.set_title(f"{run_name}_{eval_split}")
     return fig
 
 def download_artifact(artifact_path: str):
     wandb.login(key=os.getenv("WANDB_API_KEY"))
+    
     resolver_run = wandb.init(
-        project="AgriPath-VLM",
+        project=TRAIN_PROJ,
         job_type="download_artifact"
     )
 
     artifact = resolver_run.use_artifact(artifact_path, type="model")
     artifact_dir = Path(artifact.download())
 
-    experiments = {
-        "ResNet50 Batch=16 LR=1e-4": (artifact_dir / "resnet50_agripath_exp_0.pth", 16, 1e-4),
-        "ResNet50 Batch=16 LR=5e-4": (artifact_dir / "resnet50_agripath_exp_1.pth", 16, 5e-4),
-        "ResNet50 Batch=16 LR=2e-4": (artifact_dir / "resnet50_agripath_exp_2.pth", 16, 2e-4),
-        "ResNet50 Batch=32 LR=1e-4": (artifact_dir / "resnet50_agripath_exp_3.pth", 32, 1e-4),
-        "ResNet50 Batch=32 LR=5e-4": (artifact_dir / "resnet50_agripath_exp_4.pth", 32, 5e-4),
-        "ResNet50 Batch=32 LR=2e-4": (artifact_dir / "resnet50_agripath_exp_5.pth", 32, 2e-4),
-        "ResNet50 Batch=64 LR=1e-4": (artifact_dir / "resnet50_agripath_exp_6.pth", 64, 1e-4),
-        "ResNet50 Batch=64 LR=5e-4": (artifact_dir / "resnet50_agripath_exp_7.pth", 64, 5e-4),
-        "ResNet50 Batch=64 LR=2e-4": (artifact_dir / "resnet50_agripath_exp_8.pth", 64, 2e-4)
-    }
+    experiments = {}
+    for ckpt_path in sorted(artifact_dir.glob("*.pth")):
+        stem_parts = ckpt_path.stem.split("_")
+        try:
+            lr = float(stem_parts[-2])
+            batch_size = int(stem_parts[-1])
+        except:
+            continue
+
+        model_name = stem_parts[0]
+        pretty_model = "ResNet50" if model_name=='resnet50' else "ConvNeXt-Tiny"
+        exp_name = f"{pretty_model} Batch={batch_size} LR={lr}"
+        experiments[exp_name] = (ckpt_path, batch_size, lr)
+
     resolver_run.finish()
     return experiments
 #endregion
 
 #region EVALUATION
-def evaluate_model(exp_name, path, batch_size, learning_rate, num_classes = NUM_CLASSES):
+def evaluate_model(exp_name, path, batch_size, learning_rate, model_name, num_classes = NUM_CLASSES):
     print(f"\nEvaluating {exp_name}...")
 
     run = wandb.init(
-        project="AgriPath-VLM-Eval",
+        project=EVAL_PROJ,
         name=exp_name,
-        config={'batch_size': batch_size, 'learning_rate': learning_rate, 'model_architecture': "ResNet50"},
+        config={'batch_size': batch_size, 'learning_rate': learning_rate, 'model_name': model_name},
         job_type=job_type
     )
 
-    model = ModelModule(num_classes=num_classes, learning_rate=learning_rate)
+    backbone = build_backbone(model_name=model_name)
+    model = ModelModule(num_classes=num_classes, learning_rate=learning_rate, backbone=backbone)
+
     checkpoint = torch.load(path, map_location=torch.device(DEVICE), weights_only=True)
     model.load_state_dict(checkpoint)
     model.to(DEVICE)
@@ -103,7 +113,7 @@ def evaluate_model(exp_name, path, batch_size, learning_rate, num_classes = NUM_
     test_loader = datamodule.test_dataloader()
     lab_test = datamodule.lab_loader()
     field_test = datamodule.field_loader()
-    label_idx, idx_label = datamodule.return_labels()
+    _, idx_label = datamodule.return_labels()
 
     #region ====Evaluation Loop
     def eval_loop(data_loader):
@@ -116,7 +126,6 @@ def evaluate_model(exp_name, path, batch_size, learning_rate, num_classes = NUM_
         re_pClass = Recall(task='multiclass', num_classes=num_classes, average=None).to(DEVICE)
         f1_pClass = F1Score(task='multiclass', num_classes=num_classes, average=None).to(DEVICE)
 
-        batch_iter = 0
         with torch.inference_mode():
             for batch in data_loader:
                 x, y = batch
@@ -133,7 +142,6 @@ def evaluate_model(exp_name, path, batch_size, learning_rate, num_classes = NUM_
                 re_pClass.update(preds, y)
                 f1_pClass.update(preds, y)
 
-                batch_iter+=1
             
         precision = pr.compute().cpu()
         recall = re.compute().cpu()
@@ -218,6 +226,6 @@ def evaluate_model(exp_name, path, batch_size, learning_rate, num_classes = NUM_
 if __name__ == '__main__':
     experiments = download_artifact(artifact_path)
     for exp, details in experiments.items():
-        path, batch, lr = details[0], details[1], details[2]
-        evaluate_model(exp_name=exp, path=path, batch_size=batch, learning_rate=lr)
+        path, batch, lr = details
+        evaluate_model(exp_name=exp, path=path, batch_size=batch, learning_rate=lr, model_name=args.model)
 #endregion

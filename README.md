@@ -1,6 +1,6 @@
 # AgriPath: A Systematic Exploration of Architectural Trade-offs for Crop Disease Classification
 
-> **Publication in Progress** — Submitted to *Transactions on Machine Learning Research (TMLR)*
+> **Publication in Progress - Paper under review**
 
 [![Dataset](https://img.shields.io/badge/HuggingFace-Dataset-yellow?logo=huggingface)](https://huggingface.co/datasets/hamzamooraj99/AgriPath-LF16-30k)
 [![W&B](https://img.shields.io/badge/Weights%20&%20Biases-Experiments-orange?logo=weightsandbiases)](https://wandb.ai/hhm2000-heriot-watt-university/AgriPath-Paper/overview)
@@ -11,185 +11,208 @@
 
 ## Overview
 
-**AgriPath** is a large-scale benchmark study evaluating the full spectrum of modern computer vision architectures for multi-class crop disease classification. We systematically compare three architectural families on a unified 65-class dataset spanning 16 crops and two imaging conditions (controlled laboratory and real-world field):
+**AgriPath** is a benchmark study for multi-class crop disease classification on a unified 65-class dataset spanning 16 crops and two imaging conditions: controlled laboratory images and real-world field images.
+
+The repository covers three model families:
 
 | Architecture Family | Representative Models |
 |---|---|
-| Convolutional Neural Networks (CNN) | ResNet-50 (transfer learning) |
-| Contrastive Vision-Language Models | CLIP, SigLIP (zero-shot & linear probe) |
+| Convolutional Neural Networks (CNN) | ResNet-50, ConvNeXt-Tiny |
+| Contrastive Vision-Language Models | CLIP, SigLIP |
 | Generative Vision-Language Models (VLM) | SmolVLM-500M, Qwen2.5-VL-3B, Qwen2.5-VL-7B |
 
-Each model family is evaluated under matching conditions, with VLMs further explored across four LoRA fine-tuning regimes to isolate the effect of training data distribution on generalisation.
+In addition to training and evaluation code, the repo now includes dataset preparation utilities, modular CNN training/evaluation scripts, and analysis notebooks used for figures and error analysis.
 
 ---
 
 ## Dataset
 
-The **AgriPath-LF16-30k** dataset is available on HuggingFace:
+The primary benchmark dataset is hosted on Hugging Face:
 
-```
+```text
 hamzamooraj99/AgriPath-LF16-30k
 ```
 
-- **~30,000** images across **65** crop-disease classes
-- **16 crops**: Apple, Bell Pepper, Blueberry, Cherry, Corn, Grape, Olive, Orange, Peach, Potato, Raspberry, Rice, Soybean, Squash, Strawberry, Tomato
-- **Two sources**: `lab` (controlled, white-background images) and `field` (uncontrolled, real-world images)
-- Standard splits: `train` / `validation` / `test`
-- Each sample includes: `image`, `crop`, `disease`, `crop_disease_label`, `numeric_label`, `source`
+Related derived datasets used by parts of the pipeline:
+
+- `hamzamooraj99/AgriPath-LF16-30k-LAB`
+- `hamzamooraj99/AgriPath-LF16-30k-FIELD`
+- `hamzamooraj99/AgriPath-CNN`
+
+Core dataset properties:
+
+- ~30,000 images
+- 65 crop-disease classes
+- 16 crops
+- Two sources: `lab` and `field`
+- Standard `train`, `validation`, and `test` splits
+- Common fields include `image`, `crop`, `disease`, `source`, `crop_disease_label`, and `numeric_label`
 
 ---
 
 ## Repository Structure
 
-```
+```text
 AgriPath-Publication/
-├── model_scripts/
-│   ├── cnn/                        # ResNet-50 transfer learning
-│   │   ├── resnet50_lightning.py   # PyTorch Lightning model & data module
-│   │   └── summary_writer.py       # Per-class metric logging
-│   ├── train/                      # Training entry points
-│   │   ├── train_clip.py           # CLIP/SigLIP linear probe training
-│   │   ├── train_peft.py           # SmolVLM LoRA fine-tuning (PEFT/TRL)
-│   │   ├── train_unsloth.py        # Qwen2.5-VL LoRA fine-tuning (Unsloth)
-│   │   ├── configs/                # Per-model YAML configs (full / lab / field / frozen-vision)
-│   │   │   ├── qwen3/
-│   │   │   ├── qwen7/
-│   │   │   └── smol/
-│   │   └── sweep_configs/          # W&B Bayesian sweep configs for HPO
-│   │       ├── qwen3/
-│   │       ├── qwen7/
-│   │       └── smol/
-│   └── eval/                       # Evaluation entry points
-│       ├── baseline_evaluator.py   # Random & majority-class baselines
-│       ├── eval_clip.py            # Linear-probe CLIP/SigLIP evaluation
-│       ├── zs_eval_clip.py         # Zero-shot CLIP/SigLIP evaluation
-│       ├── eval_peft.py            # SmolVLM LoRA evaluation
-│       ├── eval_unsloth.py         # Qwen2.5-VL LoRA/zero-shot evaluation
-│       ├── configs/                # Eval YAML configs (LoRA & zero-shot)
-│       │   ├── lora_evals/
-│       │   └── zero_shot/
-│       └── helper_scripts/
-│           ├── count_classes.py
-│           └── find_majority.py
-├── analysis/
-│   ├── clip_inference.ipynb        # CLIP/SigLIP inference & visualisation
-│   ├── cnn_inference.ipynb         # ResNet-50 inference & visualisation
-│   ├── dataset_figures.ipynb       # Dataset distribution figures
-│   ├── resnet50_lightning.py
-│   ├── diagrams/                   # Architecture & results diagrams
-│   ├── error analysis/
-│   │   ├── CLIP-Full(main).csv     # Per-sample error records (CLIP)
-│   │   ├── CNN-Full(main).csv      # Per-sample error records (CNN)
-│   │   └── conf_mat.ipynb          # Confusion matrix analysis notebook
-│   └── parse_outputs/
-│       ├── csv_fix.py              # VLM output post-processing
-│       ├── qwen3.csv               # Raw Qwen-3B generation outputs
-│       ├── qwen7.csv               # Raw Qwen-7B generation outputs
-│       └── smol.csv                # Raw SmolVLM generation outputs
-└── README.md
+|-- dataset_scripts/                  # Dataset modifiers and split-generation utilities
+|   |-- custom_labels.py              # Adds crop_disease_label / numeric_label columns
+|   |-- downsampler_split.py          # Builds the LF16-30k benchmark from the larger source dataset
+|   `-- lab_field_separator.py        # Creates LAB and FIELD dataset variants
+|-- model_scripts/
+|   |-- cnn/
+|   |   |-- cnn_lightning.py          # Modular Lightning data module + CNN training entry point
+|   |   `-- summary_writer.py         # Artifact-based CNN evaluation and per-class summary logging
+|   |-- train/
+|   |   |-- train_clip.py             # Linear-probe training for CLIP/SigLIP backbones
+|   |   |-- train_peft.py             # SmolVLM LoRA fine-tuning with PEFT/TRL
+|   |   |-- train_unsloth.py          # Qwen2.5-VL LoRA fine-tuning with Unsloth
+|   |   |-- configs/                  # Final training configs by model family
+|   |   `-- sweep_configs/            # W&B sweep configs for hyperparameter search
+|   `-- eval/
+|       |-- baseline_evaluator.py     # Random and majority-class baselines
+|       |-- eval_clip.py              # Linear-probe evaluation for CLIP/SigLIP heads
+|       |-- zs_eval_clip.py           # Zero-shot CLIP/SigLIP evaluation
+|       |-- eval_peft.py              # SmolVLM LoRA / frozen-vision evaluation
+|       |-- eval_unsloth.py           # Qwen2.5-VL LoRA / zero-shot evaluation
+|       |-- configs/                  # Evaluation configs (current + legacy)
+|       |-- helper_scripts/           # Small evaluation helpers
+|       `-- run_zs_evals/             # Convenience shell launchers for zero-shot runs
+|-- analysis/
+|   |-- dataset_figures.ipynb         # Dataset statistics and paper figures
+|   |-- cnn_inference.ipynb           # CNN inference and qualitative inspection
+|   |-- clip_inference.ipynb          # CLIP/SigLIP inference analysis
+|   |-- resnet50_lightning.py         # Legacy analysis snapshot of the older CNN script
+|   |-- diagrams/                     # Saved plots and visual assets
+|   |-- error analysis/               # Error CSVs, heatmaps, and confusion-matrix notebook
+|   `-- parse_outputs/                # VLM output post-processing
+|-- requirements.txt
+`-- README.md
 ```
 
 ---
 
-## Models & Training Regimes
+## Recent Codebase Updates
 
-### 1. ResNet-50 (CNN Baseline)
+The CNN workflow has been reorganised to support a more modular setup:
 
-Transfer learning from ImageNet pre-trained weights. The convolutional backbone is partially frozen, with a fine-tuned classification head targeting 65 classes. Trained using **PyTorch Lightning**.
+- `model_scripts/cnn/resnet50_lightning.py` was renamed to `model_scripts/cnn/cnn_lightning.py`
+- `cnn_lightning.py` now supports both `resnet50` and `convnext` backbones behind a shared Lightning module
+- `summary_writer.py` was refactored to consume exported W&B checkpoint artifacts and evaluate all saved CNN experiments in a uniform way
+- `dataset_scripts/` was added to document and reproduce the benchmark dataset preparation workflow
+
+The older `analysis/resnet50_lightning.py` file is still present as a legacy analysis copy, but the maintained training entry point is `model_scripts/cnn/cnn_lightning.py`.
+
+---
+
+## Models and Training
+
+### 1. CNN Baselines
+
+The CNN pipeline is built around a reusable Lightning data module and a generic `CNNLightningModel` that accepts different torchvision backbones.
+
+Currently supported backbones:
+
+- `resnet50`
+- `convnext`
+
+Example training run:
 
 ```bash
-# Example usage
-python model_scripts/cnn/resnet50_lightning.py
+python model_scripts/cnn/cnn_lightning.py --model resnet50 --data main --max_epochs 10
 ```
 
-### 2. CLIP / SigLIP (Contrastive VLM)
+Other valid dataset targets:
 
-Two evaluation modes:
+- `--data lab`
+- `--data field`
 
-- **Zero-shot**: Cosine similarity against text-engineered prompts (e.g. *"a photo of a tomato leaf with early blight"*)
-- **Linear probe**: Frozen CLIP/SigLIP vision encoder + trained linear classification head
+This script runs a small grid over batch sizes and learning rates, trains a checkpoint for each combination, and logs the resulting artifacts to Weights & Biases.
+
+To evaluate logged CNN checkpoints and write summary tables:
 
 ```bash
-# Zero-shot evaluation
+python model_scripts/cnn/summary_writer.py --model resnet50 --exp main --org <wandb-entity> --artifact_version 0
+```
+
+> NOTE: Training and evaluation for ConvNeXt-Tiny is underway and not complete as yet.
+
+### 2. CLIP / SigLIP
+
+The contrastive pipeline supports both zero-shot evaluation and frozen-backbone linear probing.
+
+Zero-shot example:
+
+```bash
 python model_scripts/eval/zs_eval_clip.py --checkpoint google/siglip-base-patch16-224 --model SigLIP
-
-# Linear probe training
-python model_scripts/train/train_clip.py --config <path/to/config>
-
-# Linear probe evaluation
-python model_scripts/eval/eval_clip.py --config <path/to/config>
 ```
 
-### 3. Vision-Language Models (Generative VLM)
-
-Three VLMs fine-tuned with **LoRA** (rank 128) for structured generation of crop and disease labels:
-
-| Model | Parameters | Training Backend |
-|---|---|---|
-| SmolVLM-500M-Instruct | 500M | PEFT / TRL |
-| Qwen2.5-VL-3B-Instruct | 3B | Unsloth |
-| Qwen2.5-VL-7B-Instruct | 7B | Unsloth |
-
-#### Fine-tuning Regimes
-
-Each VLM is trained under four conditions to study the effect of training-data distribution:
-
-| Regime | Training Data | Config Suffix |
-|---|---|---|
-| `full_lora` | Full dataset (lab + field) | `*_full_lora.yaml` |
-| `lab_lora` | Lab images only | `*_lab.yaml` |
-| `field_lora` | Field images only | `*_field.yaml` |
-| `frozen_vision` | Full dataset, vision encoder frozen | `*_fv.yaml` |
-
-#### Hyperparameter Optimisation (W&B Sweeps)
-
-Learning rate and weight decay for each VLM × regime combination were determined via **Weights & Biases Bayesian sweeps** before final training. Sweep configs live in `model_scripts/train/sweep_configs/` and drive the training scripts directly, with the optimised values then committed back into the corresponding `configs/` YAML for reproducible final runs.
+Linear-probe training example:
 
 ```bash
-# Launch a W&B sweep (example: SmolVLM full LoRA)
-wandb sweep model_scripts/train/sweep_configs/smol/smol_full.yaml
-wandb agent <sweep_id>   # runs train_peft.py with sampled HPs
+python model_scripts/train/train_clip.py --model google/siglip-base-patch16-224 --run_name SigLIP_google_patch16 --base SigLIP
+```
 
-# Final training with optimal HPs (Unsloth — Qwen models)
+Linear-probe evaluation example:
+
+```bash
+python model_scripts/eval/eval_clip.py --checkpoint google/siglip-base-patch16-224 --head_artifact <wandb-artifact> --lr 1e-3 --model_name SigLIP
+```
+
+### 3. Generative VLMs
+
+The repo includes LoRA fine-tuning and evaluation pipelines for:
+
+| Model | Training Backend |
+|---|---|
+| SmolVLM-500M-Instruct | PEFT / TRL |
+| Qwen2.5-VL-3B-Instruct | Unsloth |
+| Qwen2.5-VL-7B-Instruct | Unsloth |
+
+Supported training regimes:
+
+| Regime | Description | Typical Config Suffix |
+|---|---|---|
+| `full_lora` | Full dataset | `*_full_lora.yaml` |
+| `lab_lora` | Lab-only training | `*_lab.yaml` |
+| `field_lora` | Field-only training | `*_field.yaml` |
+| `train_frozen_vision` | Language-side tuning with frozen vision layers | `*_fv.yaml` |
+
+Example training runs:
+
+```bash
 python model_scripts/train/train_unsloth.py --config model_scripts/train/configs/qwen3/qwen3_full_lora.yaml
-
-# Final training with optimal HPs (PEFT/TRL — SmolVLM)
 python model_scripts/train/train_peft.py --config model_scripts/train/configs/smol/smol_full_lora.yaml
+```
 
-# VLM evaluation
-python model_scripts/eval/eval_unsloth.py --config model_scripts/eval/configs/lora_evals/qwen3/qwen3_full/...yaml
+Example evaluation runs:
+
+```bash
+python model_scripts/eval/eval_unsloth.py --config model_scripts/eval/configs/lora_evals/qwen3/qwen3_full/charmed.yaml
+python model_scripts/eval/eval_peft.py --config model_scripts/eval/configs/lora_evals/smol/smol_full/v9.yaml
 ```
 
 ---
 
 ## Evaluation Protocol
 
-All models are evaluated on three test splits:
+All major model families are evaluated across three test views:
 
 | Split | Description |
 |---|---|
-| **Full** | Complete held-out test set |
-| **Lab** | Test samples from controlled laboratory settings |
-| **Field** | Test samples from real-world field conditions |
+| `Main` | Full held-out test set |
+| `Lab` | Controlled laboratory subset |
+| `Field` | Real-world field subset |
 
-**Metrics** (all macro-averaged across 65 classes):
+Reported metrics include:
 
-- Precision
-- Recall
-- F1-Score
-- Per-class F1
-- Confusion Matrix
+- Macro precision
+- Macro recall
+- Macro F1
+- Balanced accuracy
+- Per-class scores
+- Confusion matrices
 
-Experiments are tracked and logged with **Weights & Biases** under the project `AgriPath-Paper`.
-
----
-
-## Zero-Shot Baselines
-
-Two statistical baselines are included for reference:
-
-- **Random**: Uniform random class prediction
-- **Majority**: Predicts the single most frequent class in the training set
+The repo also includes two simple baselines:
 
 ```bash
 python model_scripts/eval/baseline_evaluator.py
@@ -197,85 +220,89 @@ python model_scripts/eval/baseline_evaluator.py
 
 ---
 
-## Analysis Notebooks
+## Dataset Preparation Utilities
 
-| Notebook | Purpose |
-|---|---|
-| `analysis/dataset_figures.ipynb` | Dataset class distribution, source breakdown |
-| `analysis/cnn_inference.ipynb` | ResNet-50 inference, top-k predictions, error visualisation |
-| `analysis/clip_inference.ipynb` | CLIP/SigLIP inference visualisation |
-| `analysis/error analysis/conf_mat.ipynb` | Per-model confusion matrix plotting and error analysis |
+The new `dataset_scripts/` directory contains the dataset construction helpers used to prepare benchmark-ready dataset variants:
+
+- `downsampler_split.py`: downsamples the larger `AgriPath-LF16` source dataset into the balanced `AgriPath-LF16-30k` benchmark
+- `lab_field_separator.py`: derives source-specific LAB and FIELD variants from the full benchmark
+- `custom_labels.py`: adds `crop_disease_label` and `numeric_label` columns for downstream model pipelines
+
+These scripts are primarily data-engineering utilities and are meant to be run selectively when rebuilding or extending the dataset assets on Hugging Face Hub.
 
 ---
 
-## Installation & Requirements
+## Analysis Assets
 
-All experiments were run on remote GPU pods (e.g. RunPod). The full pinned dependency list is in [`requirements.txt`](requirements.txt). To replicate the environment on a fresh pod:
+The `analysis/` directory contains notebooks and saved outputs used for inspection and paper figures:
+
+| Path | Purpose |
+|---|---|
+| `analysis/dataset_figures.ipynb` | Dataset distribution plots |
+| `analysis/cnn_inference.ipynb` | CNN inference and failure inspection |
+| `analysis/clip_inference.ipynb` | CLIP/SigLIP inference analysis |
+| `analysis/error analysis/conf_mat.ipynb` | Confusion-matrix and error analysis |
+| `analysis/parse_outputs/csv_fix.py` | Post-processing for generated VLM outputs |
+
+---
+
+## Installation
+
+Install the pinned environment with:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-Key packages and versions:
+Key dependencies include:
 
-| Package | Version | Purpose |
-|---|---|---|
-| `torch` | 2.7.0 | Core deep learning framework |
-| `unsloth` | 2025.7.3 | Efficient VLM LoRA fine-tuning |
-| `transformers` | 4.53.1 | Model loading & processors |
-| `peft` | 0.16.0 | LoRA adapters (SmolVLM) |
-| `trl` | 0.19.0 | SFT trainer |
-| `datasets` | 3.6.0 | HuggingFace dataset streaming |
-| `pytorch-lightning` | 2.5.0 | CNN & CLIP training loops |
-| `torchmetrics` | 1.7.4 | Evaluation metrics |
-| `wandb` | 0.21.0 | Experiment tracking & sweeps |
+| Package | Purpose |
+|---|---|
+| `torch` | Core deep learning framework |
+| `pytorch-lightning` | CNN and linear-probe training loops |
+| `transformers` | Backbone loading, processors, and VLM support |
+| `datasets` | Hugging Face dataset access |
+| `peft` | LoRA adapters |
+| `trl` | SFT training utilities |
+| `unsloth` | Efficient Qwen VLM fine-tuning |
+| `wandb` | Experiment tracking and artifact management |
 
-> **Note**: Unsloth requires a CUDA-compatible GPU. See the [Unsloth installation guide](https://github.com/unslothai/unsloth) for driver requirements.
+> **Note:** several scripts assume a CUDA-capable GPU and a configured `WANDB_API_KEY`.
 
 ---
 
 ## Configuration
 
-All training and evaluation scripts are driven by YAML configuration files. Key fields:
+Most VLM training and evaluation entry points are config-driven. Example fields:
 
 ```yaml
-model_name: unsloth/Qwen2.5-VL-3B-Instruct   # HuggingFace model identifier
-run_name: Qwen-3B_FLoRA                        # W&B run name
-trc: false                                     # Test-run check (limit batches)
-job_type: full_lora                            # Experiment type tag
-r: 128                                         # LoRA rank
+model_name: unsloth/Qwen2.5-VL-3B-Instruct
+run_name: Qwen2.5-VL_3B_FLoRA
+trc: false
+job_type: full_lora
+r: 128
 learning_rate: 1.5e-4
 weight_decay: 0.05
-save_repo: hamzamooraj99/AgriPath-Qwen3B-LoRA  # HuggingFace push target (optional)
+save_repo: hamzamooraj99/AgriPath-Qwen3B-LoRA
 ```
+
+Training configs live under `model_scripts/train/configs/` and evaluation configs live under `model_scripts/eval/configs/`.
 
 ---
 
 ## Experiment Tracking
 
-All experiments are logged to **Weights & Biases**. Set your API key before running:
+Experiments are logged with Weights & Biases. Before running the artifact-aware scripts, export your API key:
 
 ```bash
 export WANDB_API_KEY=<your_api_key>
 ```
 
-Artifacts (model checkpoints, classifier heads) are stored and versioned as W&B artifacts and optionally pushed to HuggingFace Hub.
+Tracked assets include:
 
-<!-- ---
-
-## Citation
-
-If you use AgriPath or this codebase in your research, please cite:
-
-```bibtex
-@article{agripath2026,
-  title   = {A Systematic Exploration of Architectural Trade-offs for Crop Disease Classification},
-  author  = {Mooraj, Hamza and others},
-  journal = {Transactions on Machine Learning Research},
-  year    = {2026},
-  note    = {Under review}
-}
-``` -->
+- CNN checkpoint bundles
+- Linear-probe classifier heads
+- LoRA adapters and evaluation summaries
 
 ---
 

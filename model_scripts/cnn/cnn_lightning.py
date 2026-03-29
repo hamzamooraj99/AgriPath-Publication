@@ -1,13 +1,17 @@
 import itertools
-from datasets import load_dataset, Dataset
+from datasets import load_dataset
 import torch
 import torch.nn as nn
 from torchvision import transforms, models
 from torch.utils.data import DataLoader
 from torchmetrics.classification import MulticlassAccuracy
 from torchvision.models.resnet import ResNet50_Weights
+from torchvision.models.convnext import ConvNeXt_Tiny_Weights
 import pytorch_lightning as pl
 from functools import partial
+from argparse import ArgumentParser
+import wandb
+import os
 
 def seed_everything(seed):
     pl.seed_everything(seed, workers=True)
@@ -38,8 +42,8 @@ class AgriPathDataModule(pl.LightningDataModule):
         self.val_set = self.dataset['validation']
         self.test_set = self.dataset['test']
         # Uncomment below for summary_writer.py
-        # self.lab_test = self.test_set.filter(lambda sample: sample['source']=='lab', num_proc=8).shuffle(seed=42)
-        # self.field_test = self.test_set.filter(lambda sample: sample['source']=='field', num_proc=8).shuffle(seed=42)
+        self.lab_test = self.test_set.filter(lambda sample: sample['source']=='lab', num_proc=8).shuffle(seed=42)
+        self.field_test = self.test_set.filter(lambda sample: sample['source']=='field', num_proc=8).shuffle(seed=42)
         self.label_idx = {sample['crop_disease_label']: sample['numeric_label'] for sample in self.test_set}
         self.idx_label = {v: k for k, v in self.label_idx.items()}
     
@@ -67,30 +71,43 @@ class AgriPathDataModule(pl.LightningDataModule):
         return self.label_idx, self.idx_label
 
 # A class that defines and modifies the ResNet50 model so that it can be used with the DataModule defined above
-class ResNet50TLModel(pl.LightningModule):
-    def __init__(self, num_classes, input_shape=2048, learning_rate=2e-4):
+class CNNLightningModel(pl.LightningModule):
+    def __init__(self, num_classes: int, backbone: models.ResNet|models.ConvNeXt, learning_rate=2e-4):
         super().__init__()
         
         # Log HyperParams
-        self.save_hyperparameters()
+        self.save_hyperparameters(ignore=["backbone"])
         self.learning_rate = learning_rate
-        self.dim = input_shape
         self.num_classes = num_classes
 
         # Load pre-trained ResNet50 model and freeze early layers for feature extraction
-        self.backbone = models.resnet50(weights=ResNet50_Weights.IMAGENET1K_V1)
-        for param in self.backbone.parameters():
-            param.requires_grad = False
-        # Unfreeze last residual block for fine-tuning
-        for param in list(self.backbone.layer4.parameters()):
-            param.requires_grad = True
+        self.backbone = backbone
 
-        # Remove original Fully Connected Layer (optimised for ImageNet)
-        in_features = self.backbone.fc.in_features
-        self.backbone.fc = nn.Identity()
+        if isinstance(self.backbone, models.ResNet):
+            for p in self.backbone.parameters():
+                p.requires_grad = False
+            # Unfreeze last residual block for fine-tuning
+            for p in self.backbone.layer4.parameters():
+                p.requires_grad = True
 
-        # Create custom classification head
-        self.classifier = nn.Linear(in_features, num_classes)
+            # Remove original Fully Connected Layer (optimised for ImageNet)
+            in_features = self.backbone.fc.in_features
+            self.backbone.fc = nn.Identity()
+            # Create custom classification head
+            self.classifier = nn.Linear(in_features, num_classes)
+
+        elif isinstance(self.backbone, models.ConvNeXt):
+            for p in self.backbone.parameters():
+                p.requires_grad = False
+            # Unfreeze last residual block for fine-tuning
+            for p in self.backbone.features[-1].parameters():
+                p.requires_grad = True
+
+            # Remove original Fully Connected Layer (optimised for ImageNet)
+            in_features = self.backbone.classifier[2].in_features
+            self.backbone.classifier[2] = nn.Identity()
+            # Create custom classification head
+            self.classifier = nn.Linear(in_features, num_classes)
 
         # Loss function and metrics
         self.criterion = nn.CrossEntropyLoss()
@@ -135,7 +152,7 @@ class ResNet50TLModel(pl.LightningModule):
         return {'loss': loss, 'outputs': out, 'labels': labels}
 
     def configure_optimizers(self):
-        return torch.optim.AdamW(self.parameters(), lr=self.hparams.learning_rate)
+        return torch.optim.AdamW(filter(lambda p: p.requires_grad, self.parameters()), lr=self.hparams.learning_rate)
 
 def check_loader(hf_repo: str):
     train_loader = AgriPathDataModule(hf_repo, batch_size=4)
@@ -148,19 +165,68 @@ def check_loader(hf_repo: str):
     print(type(labels), labels.shape)
 
 if __name__ == '__main__':
-    hf_repo = "hamzamooraj99/AgriPath-LF16-30k-FIELD"
+    parser = ArgumentParser()
+    parser.add_argument('-d', '--data', type=str, choices=['main', 'lab', 'field'], help="Type of HuggingFace Dataset (choose from main, lab, field)", default='main')
+    parser.add_argument('-e', '--max_epochs', type=int, help="Number of epochs to run during training", default=10)
+    parser.add_argument('-m', '--model', type=str, choices=['resnet50', 'convnext'], help="Select model to train (choose from resnet, convnext)", required=True)
+    args = parser.parse_args()
+
+    if args.data == 'main':
+        hf_repo = "hamzamooraj99/AgriPath-LF16-30k"
+    elif args.data == 'lab':
+        hf_repo = "hamzamooraj99/AgriPath-LF16-30k-LAB"
+    elif args.data == 'field':
+        hf_repo = "hamzamooraj99/AgriPath-LF16-30k-FIELD"
+
     batch_sizes = [16, 32, 64]
     learning_rates = [1e-4, 5e-4, 2e-4]
     num_classes = 65
-    max_epochs = 10
+    max_epochs = args.max_epochs
     experiment_id = 0
+
+    save_dir = f"{args.data}_{args.model}_experiments"
+    os.makedirs(save_dir, exist_ok=True)
+
+    seed_everything(42)
+
+    run = wandb.init(
+        project="AgriPath-VLM",
+        job_type=f'{args.model}_{args.data}_ckpts',
+        config={
+            "model": args.model,
+            "dataset": f"AgriPath-LF16-30k-{args.data.upper()}",
+            "max_epochs": max_epochs,
+            "num_classes": num_classes,
+            "sweep_info": {
+                "batch_sizes": batch_sizes,
+                "learning_rates": learning_rates
+            },
+            "num_checkpoints": len(batch_sizes) * len(learning_rates),
+        }
+    )
+
+    artifact = wandb.Artifact(
+        name=f"{args.model}_{args.data}_checkpoints",
+        type='model',
+        description=f"Nine {args.model} CNN .pth checkpoints for {args.data} split",
+        metadata=run.config.as_dict()
+    )
 
     for batch_size, lr in itertools.product(batch_sizes, learning_rates):
         print(f"\n==== Running Experiment {experiment_id}: Batch Size = {batch_size}, LR = {lr} ====\n")
 
         # Define model with new learning rate
         print(f"\nDefine model with learning rate {lr}")
-        model = ResNet50TLModel(num_classes=num_classes, learning_rate=lr)
+        the_model = None
+        try:
+            if args.model == "resnet50":
+                the_model = models.resnet50(weights=ResNet50_Weights.IMAGENET1K_V1)
+            elif args.model == "convnext":
+                the_model = models.convnext_tiny(weights=ConvNeXt_Tiny_Weights.IMAGENET1K_V1)
+        except ValueError:
+            print("INVALID MODEL")
+        
+        model = CNNLightningModel(num_classes=num_classes, learning_rate=lr, backbone=the_model)
 
         # Trainer setup
         trainer = pl.Trainer(
@@ -184,6 +250,10 @@ if __name__ == '__main__':
 
         # Save model
         print(f"\nSaving model")
-        torch.save(model.state_dict(), f"field_experiments/resnet50_agripath_exp_{experiment_id}.pth")
+        ckpt_name = f"{args.model}_agripath_exp_{lr}_{batch_size}.pth"
+        ckpt_path = os.path.join(save_dir, ckpt_name)
+        torch.save(model.state_dict(), ckpt_path)
 
-        experiment_id += 1
+        artifact.add_file(local_path=ckpt_path, name=ckpt_name)
+
+    run.log_artifact(artifact)
