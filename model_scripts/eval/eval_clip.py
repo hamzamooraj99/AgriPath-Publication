@@ -25,9 +25,9 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--checkpoint", type=str, required=True,)
 parser.add_argument("--head_artifact", type=str, required=True)
 parser.add_argument("--lr", type=str, required=True)
-parser.add_argument("--model_name", type=str, required=True)
-parser.add_argument("--project", type=str, default="AgriPath-Paper")
-parser.add_argument("--hf_repo", type=str, default="hamzamooraj99/AgriPath-LF16-30k")
+parser.add_argument("--job_type", type=str, required=True)
+parser.add_argument("--project", type=str, default="AgriPath-Evals")
+parser.add_argument("-d", "--dataset", type=str, default="hamzamooraj99/AgriPath-LF16-30k-CLEAN")
 parser.add_argument("--batch_size", type=int, default=32)
 parser.add_argument("--num_workers", type=int, default=8)
 parser.add_argument("--seed", type=int, default=42)
@@ -49,7 +49,7 @@ def plot_conf_matrix(conf_mat, run_name, eval_batch):
 #endregion
 
 #region DATASET HANDLING
-test_set = load_dataset("hamzamooraj99/AgriPath-LF16-30k", split='test').shuffle(seed=args.seed)
+test_set = load_dataset(args.dataset, split='test').shuffle(seed=args.seed)
 field_set = test_set.filter(lambda sample: sample['source']=='field', num_proc=args.num_workers).shuffle(seed=args.seed)
 lab_set = test_set.filter(lambda sample: sample['source']=='lab', num_proc=args.num_workers).shuffle(seed=args.seed)
 
@@ -194,9 +194,9 @@ def main():
             "head_source": args.head_artifact,
             "num_classes": num_classes,
             "feature_norm": "l2",
-            "job_type": f"{args.model_name}_eval",
+            "job_type": args.job_type,
         },
-        job_type=f"{args.model_name}_eval",
+        job_type=args.job_type,
     )
 
     processor, backbone, classifier, feat_dim, head_meta = load_model(run)

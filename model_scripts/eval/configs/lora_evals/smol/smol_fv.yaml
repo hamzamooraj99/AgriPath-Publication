@@ -1,5 +1,5 @@
 artifact_path: hhm2000-heriot-watt-university/AgriPath-VLM-Sweep/model-playful-sweep-2:v1
 model_name: AgriPath-SmolVLM-500M
-run_name: Smol-playful-FV
+run_name: Smol-FV
 trc: False
-job_type: Smol-FV_Eval
+job_type: smol_lora_evals

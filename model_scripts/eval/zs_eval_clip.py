@@ -16,6 +16,7 @@ from tqdm import tqdm
 parser = argparse.ArgumentParser()
 parser.add_argument("--checkpoint", type=str, default="google/siglip-base-patch16-224")
 parser.add_argument("--model", type=str, required=True, choices=["SigLIP", "CLIP"])
+parser.add_argument('-d', '--dataset', type=str, required=False, default="hamzamooraj99/AgriPath-LF16-30k-CLEAN")
 args = parser.parse_args()
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -50,7 +51,7 @@ def plot_conf_matrix(conf_mat, run_name, eval_batch):
 #endregion
 
 #region DATASET HANDLING
-test_set = load_dataset("hamzamooraj99/AgriPath-LF16-30k", split='test').shuffle(seed=42)
+test_set = load_dataset(args.dataset, split='test').shuffle(seed=42)
 # Separate dataset via source
 field_set = test_set.filter(lambda sample: sample['source']=='field', num_proc=8).shuffle(seed=42)
 lab_set = test_set.filter(lambda sample: sample['source']=='lab', num_proc=8).shuffle(seed=42)
@@ -151,12 +152,12 @@ def eval(data_source, source_name: str, processor, model, prototypes):
 def main():
     wandb.login(key=os.getenv("WANDB_API_KEY"))
     run = wandb.init(
-        project="AgriPath-VLM-Eval",
+        project="AgriPath-Evals",
         name=f"{args.model}-ZS",
         config={
             "checkpoint": args.checkpoint,
             "batch_size": 32,
-            "hf_repo": "hamzamooraj99/AgriPath-LF16-30k",
+            "hf_repo": args.dataset,
             "templates_diseased": DISEASED_TEMPLATES,
             "templates_healthy": HEALTHY_TEMPLATES,
             "method": f"{args.model.lower()}_zeroshot_template_ensemble",

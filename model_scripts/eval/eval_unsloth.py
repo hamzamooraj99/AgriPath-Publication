@@ -24,6 +24,7 @@ random.seed(SEED)
 # Argument Parser
 parser = argparse.ArgumentParser()
 parser.add_argument('--config', type=str, required=True, help='Path to YAML Config')
+parser.add_argument('-d', '--dataset', type=str, required=False, default="hamzamooraj99/AgriPath-LF16-30k-CLEAN")
 args = parser.parse_args()
 
 # Load YAML Config
@@ -44,7 +45,7 @@ except KeyError:
 try:
     proj_name = config['proj_name']
 except KeyError:
-    proj_name = "AgriPath-Paper"
+    proj_name = "AgriPath-Evals"
 #endregion
 
 #region W&B SETUP
@@ -380,7 +381,7 @@ def eval(data_loader, model, processor, label_idx, eval_batch, zs_type=None):
 def main():
     #region ====Dataset Prep
     # Load Dataset
-    test_set = load_dataset("hamzamooraj99/AgriPath-LF16-30k", split='test').shuffle(seed=SEED)
+    test_set = load_dataset(args.dataset, split='test').shuffle(seed=SEED)
 
     # Separate dataset via source
     field_set = test_set.filter(lambda sample: sample['source']=='field', num_proc=8).shuffle(seed=SEED)

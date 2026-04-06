@@ -1,6 +1,7 @@
 import os
 import re
 import argparse
+import itertools
 from pathlib import Path
 
 import torch
@@ -30,8 +31,10 @@ NUM_CLASSES = 65
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 ORG = args.org
 TRAIN_PROJ = "AgriPath-VLM"
-EVAL_PROJ = "AgriPath-Paper"
-HF_REPO = "hamzamooraj99/AgriPath-LF16-30k"
+EVAL_PROJ = "AgriPath-Evals"
+HF_REPO = "hamzamooraj99/AgriPath-LF16-30k-CLEAN"
+SWEEP_BATCH_SIZES = [16, 32, 64]
+SWEEP_LEARNING_RATES = [1e-4, 5e-4, 2e-4]
 #endregion
 
 #region SETUP
@@ -60,6 +63,36 @@ def plot_conf_matrix(conf_mat, run_name, eval_split):
     ax.set_title(f"{run_name}_{eval_split}")
     return fig
 
+def parse_checkpoint_metadata(ckpt_path: Path):
+    stem = ckpt_path.stem
+
+    match = re.match(
+        r"^(?P<model>[^_]+)_agripath_exp_(?P<lr>\d*\.?\d+(?:e-?\d+)?)_(?P<batch>\d+)$",
+        stem
+    )
+    if match:
+        model_name = match.group("model")
+        learning_rate = float(match.group("lr"))
+        batch_size = int(match.group("batch"))
+        return model_name, batch_size, learning_rate
+
+    match = re.match(
+        r"^(?P<model>[^_]+)_agripath_exp_(?P<exp_id>\d+)$",
+        stem
+    )
+    if match:
+        model_name = match.group("model")
+        experiment_id = int(match.group("exp_id"))
+        sweep = list(itertools.product(SWEEP_BATCH_SIZES, SWEEP_LEARNING_RATES))
+        if experiment_id >= len(sweep):
+            raise ValueError(
+                f"Experiment id {experiment_id} in '{ckpt_path.name}' is outside the supported sweep range 0-{len(sweep)-1}."
+            )
+        batch_size, learning_rate = sweep[experiment_id]
+        return model_name, batch_size, learning_rate
+
+    return None
+
 def download_artifact(artifact_path: str):
     wandb.login(key=os.getenv("WANDB_API_KEY"))
     
@@ -72,20 +105,33 @@ def download_artifact(artifact_path: str):
     artifact_dir = Path(artifact.download())
 
     experiments = {}
+    skipped_files = []
     for ckpt_path in sorted(artifact_dir.glob("*.pth")):
-        stem_parts = ckpt_path.stem.split("_")
         try:
-            lr = float(stem_parts[-2])
-            batch_size = int(stem_parts[-1])
-        except:
+            parsed = parse_checkpoint_metadata(ckpt_path)
+        except ValueError as exc:
+            resolver_run.finish()
+            raise ValueError(f"Unable to parse checkpoint metadata for '{ckpt_path.name}': {exc}") from exc
+
+        if parsed is None:
+            skipped_files.append(ckpt_path.name)
             continue
 
-        model_name = stem_parts[0]
+        model_name, batch_size, lr = parsed
         pretty_model = "ResNet50" if model_name=='resnet50' else "ConvNeXt-Tiny"
         exp_name = f"{pretty_model} Batch={batch_size} LR={lr}"
         experiments[exp_name] = (ckpt_path, batch_size, lr)
 
     resolver_run.finish()
+
+    if not experiments:
+        found_files = [path.name for path in sorted(artifact_dir.glob("*.pth"))]
+        raise RuntimeError(
+            "No valid checkpoints were found in the downloaded artifact. "
+            f"Found .pth files: {found_files}. "
+            f"Skipped files: {skipped_files}."
+        )
+
     return experiments
 #endregion
 

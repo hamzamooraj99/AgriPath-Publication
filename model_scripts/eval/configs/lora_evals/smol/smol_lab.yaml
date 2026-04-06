@@ -1,5 +1,5 @@
 artifact_path: hhm2000-heriot-watt-university/AgriPath-VLM-Sweep/model-SmolVLM_500M_LLoRA:v3
 model_name: AgriPath-SmolVLM-500M
-run_name: Smol-LLoRA-v3
+run_name: Smol-Lab
 trc: False
-job_type: Smol-LAB_Eval
+job_type: smol_lora_evals
