@@ -1,6 +1,6 @@
 # AgriPath: A Systematic Exploration of Architectural Trade-offs for Crop Disease Classification
 
-> **Publication in Progress - Paper under review**
+> **Accepted for Publication at Transactions of Machine Learning Research (TMLR), 2026 --- Camera-Ready Manuscript in progress**
 
 [![Dataset](https://img.shields.io/badge/HuggingFace-Dataset-yellow?logo=huggingface)](https://huggingface.co/datasets/hamzamooraj99/AgriPath-LF16-30k)
 [![W&B](https://img.shields.io/badge/Weights%20&%20Biases-Experiments-orange?logo=weightsandbiases)](https://wandb.ai/hhm2000-heriot-watt-university/AgriPath-Paper/overview)
